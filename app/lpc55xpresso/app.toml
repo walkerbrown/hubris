@@ -2,7 +2,7 @@ name = "lpc55xpresso"
 target = "thumbv8m.main-none-eabihf"
 board = "lpcxpresso55s69"
 stacksize = 1024
-secure = true
+secure = false
 
 [kernel]
 path = "."
@@ -60,6 +60,7 @@ imagea-flash-start = 0x8000
 imagea-flash-size = 0x88000
 imagea-ram-start = 0x20004000
 imagea-ram-size = 0x18000
+features = ["secure"]
 
 [tasks.jefe]
 path = "../../task/jefe"
