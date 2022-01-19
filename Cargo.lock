@@ -777,6 +777,8 @@ dependencies = [
  "idol-runtime",
  "num-traits",
  "ringbuf",
+ "serde",
+ "serde_json",
  "userlib",
  "zerocopy",
 ]

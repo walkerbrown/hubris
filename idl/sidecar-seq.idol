@@ -26,7 +26,7 @@ Interface(
                 err: CLike("SeqError"),
             ),
         ),
-        "load_clock_config": (
+    "load_clock_config": (
             args: {},
             reply: Result(
                 ok: "()",
