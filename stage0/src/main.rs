@@ -16,7 +16,7 @@ use cortex_m_rt::entry;
 mod hypo;
 mod image_header;
 
-use crate::image_header::ImageHeader;
+use crate::image_header::Image;
 
 /// Initial entry point for handling a memory management fault.
 #[allow(non_snake_case)]
@@ -53,25 +53,19 @@ const ROM_VER: u32 = 0;
 const ROM_VER: u32 = 1;
 
 #[cfg(feature = "secure")]
-unsafe fn branch_to_image(image: &'static ImageHeader) -> ! {
+unsafe fn branch_to_image(image: Image) -> ! {
     let sau_ctrl: *mut u32 = 0xe000edd0 as *mut u32;
     let sau_rbar: *mut u32 = 0xe000eddc as *mut u32;
     let sau_rlar: *mut u32 = 0xe000ede0 as *mut u32;
     let sau_rnr: *mut u32 = 0xe000edd8 as *mut u32;
 
-    // TODO our NSC region
-
-    core::ptr::write_volatile(sau_rnr, 0);
-    core::ptr::write_volatile(sau_rbar, 0x8000);
-    core::ptr::write_volatile(sau_rlar, 0x0fff_ffe0 | 1);
-
-    core::ptr::write_volatile(sau_rnr, 1);
-    core::ptr::write_volatile(sau_rbar, 0x20004000);
-    core::ptr::write_volatile(sau_rlar, 0x2fff_ffe0 | 1);
-
-    core::ptr::write_volatile(sau_rnr, 2);
-    core::ptr::write_volatile(sau_rbar, 0x4000_0000);
-    core::ptr::write_volatile(sau_rlar, 0x4fff_ffe0 | 1);
+    for i in 0..8 {
+        if let Some(r) = image.get_sau_entry(i) {
+            core::ptr::write_volatile(sau_rnr, i as u32);
+            core::ptr::write_volatile(sau_rbar, r.rbar);
+            core::ptr::write_volatile(sau_rlar, r.rlar);
+        }
+    }
 
     core::ptr::write_volatile(sau_ctrl, 1);
 
@@ -98,7 +92,7 @@ unsafe fn branch_to_image(image: &'static ImageHeader) -> ! {
     core::ptr::write_volatile(0xe000ed0c as *mut u32, 0x05fa2000);
 
     // Write the NS_VTOR
-    core::ptr::write_volatile(0xE002ED08 as *mut u32, image.get_img_start());
+    core::ptr::write_volatile(0xE002ED08 as *mut u32, image.get_vectors());
 
     // For secure we do not set the thumb bit!
     let entry_pt = image.get_pc() & !1u32;
@@ -115,7 +109,7 @@ unsafe fn branch_to_image(image: &'static ImageHeader) -> ! {
 }
 
 #[cfg(not(feature = "secure"))]
-unsafe fn branch_to_image(image: &'static ImageHeader) -> ! {
+unsafe fn branch_to_image(image: Image) -> ! {
     let mut peripherals = match Peripherals::take() {
         Some(p) => p,
         None => loop {},
@@ -129,7 +123,7 @@ unsafe fn branch_to_image(image: &'static ImageHeader) -> ! {
         .enable(cortex_m::peripheral::scb::Exception::BusFault);
 
     // Write the VTOR
-    core::ptr::write_volatile(0xE000ED08 as *mut u32, image.get_img_start());
+    core::ptr::write_volatile(0xE000ED08 as *mut u32, image.get_vectors());
 
     let entry_pt = image.get_pc();
     let stack = image.get_sp();

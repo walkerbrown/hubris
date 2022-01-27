@@ -4,8 +4,10 @@
 
 //! Kernel ABI definitions, shared between kernel and applications.
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "std")]
+use packed_struct::prelude::*;
 use serde::{Deserialize, Serialize};
 use zerocopy::{AsBytes, FromBytes, Unaligned};
 
@@ -545,4 +547,45 @@ impl core::convert::TryFrom<u32> for Sysnum {
             _ => Err(()),
         }
     }
+}
+
+#[repr(C)]
+#[derive(Default, Copy, Clone, Debug)]
+#[cfg_attr(feature = "std", derive(PackedStruct))]
+#[cfg_attr(
+    feature = "std",
+    packed_struct(size_bytes = "0x8", bit_numbering = "msb0", endian = "msb")
+)]
+pub struct SAUEntry {
+    #[cfg_attr(feature = "std", packed_field(endian = "lsb"))]
+    pub rbar: u32,
+    #[cfg_attr(feature = "std", packed_field(endian = "lsb"))]
+    pub rlar: u32,
+}
+
+pub const HEADER_MAGIC: u32 = 0x1535_6637;
+
+#[repr(C)]
+#[derive(Default)]
+#[cfg_attr(feature = "std", derive(PackedStruct))]
+#[cfg_attr(
+    feature = "std",
+    packed_struct(size_bytes = "0x80", bit_numbering = "msb0", endian = "msb")
+)]
+pub struct ImageHeader {
+    #[cfg_attr(feature = "std", packed_field(endian = "lsb"))]
+    pub magic: u32,
+    #[cfg_attr(feature = "std", packed_field(endian = "lsb"))]
+    pub entry: u32,
+    #[cfg_attr(feature = "std", packed_field(endian = "lsb"))]
+    pub vector: u32,
+    #[cfg_attr(feature = "std", packed_field(endian = "lsb"))]
+    pub total_image_len: u32,
+    #[cfg_attr(
+        feature = "std",
+        packed_field(endian = "lsb", element_size_bytes = "0x8")
+    )]
+    pub sau_entries: [SAUEntry; 8],
+    // pad for VTOR alignment (128)
+    pub _pad: [u32; 12],
 }

@@ -22,7 +22,8 @@ use crate::{
     Supervisor, Task,
 };
 
-use lpc55_sign::{crc_image, sign_ecc, signed_image};
+use lpc55_sign::{crc_image, signed_image};
+use packed_struct::{PackedStruct, PackedStructSlice};
 
 /// In practice, applications with active interrupt activity tend to use about
 /// 650 bytes of stack. Because kernel stack overflows are annoying, we've
@@ -264,7 +265,15 @@ pub fn package(
         )?;
 
         if let Some(signing) = toml.signing.get("bootloader") {
-            do_sign_file(signing, &out, &src_dir, "bootloader")?;
+            do_sign_file(
+                signing,
+                &out,
+                &src_dir,
+                "bootloader",
+                0,
+                0,
+                &starting_memories,
+            )?;
         }
 
         // We need to get the absolute symbols for the non-secure application
@@ -344,7 +353,12 @@ pub fn package(
 
         resolve_task_slots(name, &toml.tasks, &out.join(name), verbose)?;
 
-        let (ep, flash) = load_elf(&out.join(name), &mut all_output_sections)?;
+        let mut symbol_table = BTreeMap::default();
+        let (ep, flash) = load_elf(
+            &out.join(name),
+            &mut all_output_sections,
+            &mut symbol_table,
+        )?;
 
         if flash > task_toml.requires["flash"] as usize {
             bail!(
@@ -388,8 +402,7 @@ pub fn package(
         toml.kernel.stacksize.unwrap_or(DEFAULT_KERNEL_STACK),
     )?;
 
-    // this one was for the tasks, but we don't want to use it for the kernel
-    fs::remove_file("target/link.x")?;
+    fs::copy("build/kernel-link.x", "target/link.x")?;
 
     // Build the kernel.
     build(
@@ -412,7 +425,13 @@ pub fn package(
             ("HUBRIS_IMAGE_ID", &format!("{}", image_id)),
         ],
     )?;
-    let (kentry, _) = load_elf(&out.join("kernel"), &mut all_output_sections)?;
+
+    let mut ksymbol_table = BTreeMap::default();
+    let (kentry, _) = load_elf(
+        &out.join("kernel"),
+        &mut all_output_sections,
+        &mut ksymbol_table,
+    )?;
 
     // Write a map file, because that seems nice.
     let mut mapfile = File::create(&out.join("map.txt"))?;
@@ -455,7 +474,15 @@ pub fn package(
     )?;
 
     if let Some(signing) = toml.signing.get("combined") {
-        do_sign_file(signing, &out, &src_dir, "combined")?;
+        do_sign_file(
+            signing,
+            &out,
+            &src_dir,
+            "combined",
+            kentry,
+            *ksymbol_table.get("__start_vector").unwrap(),
+            &starting_memories,
+        )?;
     }
 
     // Okay we now have signed hubris image and signed bootloader
@@ -624,6 +651,50 @@ pub fn package(
     Ok(())
 }
 
+fn generate_header(
+    in_binary: &PathBuf,
+    out_binary: &PathBuf,
+    entry: u32,
+    vtor: u32,
+    memories: &IndexMap<String, Range<u32>>,
+) -> Result<()> {
+    let bytes = std::fs::read(in_binary)?;
+    let image_len = bytes.len();
+
+    let flash = memories.get("flash").unwrap();
+    let ram = memories.get("ram").unwrap();
+
+    let header_size = abi::ImageHeader::packed_bytes_size(None)?;
+
+    let mut header: abi::ImageHeader = Default::default();
+
+    header.magic = abi::HEADER_MAGIC;
+    header.entry = entry;
+    header.vector = vtor;
+    header.total_image_len = image_len as u32;
+
+    header.sau_entries[0].rbar = flash.start;
+    header.sau_entries[0].rlar = (flash.end - 1) & !0x1f | 1;
+
+    header.sau_entries[1].rbar = ram.start;
+    header.sau_entries[1].rlar = (ram.end - 1) & !0x1f | 1;
+
+    // Our peripherals
+    header.sau_entries[2].rbar = 0x4000_0000;
+    header.sau_entries[2].rlar = 0x4fff_ffe0 | 1;
+
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .append(false)
+        .create(true)
+        .open(out_binary)?;
+    out.write_all(&header.pack()?)?;
+    out.write_all(&bytes[header_size..])?;
+
+    Ok(())
+}
+
 fn smash_bootloader(
     bootloader: &PathBuf,
     bootloader_addr: u32,
@@ -682,6 +753,9 @@ fn do_sign_file(
     out: &PathBuf,
     src_dir: &PathBuf,
     fname: &str,
+    entry: u32,
+    vtor: u32,
+    memories: &IndexMap<String, Range<u32>>,
 ) -> Result<()> {
     if sign.method == "crc" {
         crc_image::update_crc(
@@ -700,11 +774,13 @@ fn do_sign_file(
             &out.join("CMPA.bin"),
         )
     } else if sign.method == "ecc" {
-        let priv_key = sign.priv_key.as_ref().unwrap();
-        sign_ecc::ecc_sign_image(
-            &out.join(format!("{}.bin", fname)),
-            &src_dir.join(&priv_key),
-            &out.join(format!("{}_ecc.bin", fname)),
+        // Right now we just generate the header
+        generate_header(
+            &out.join("combined.bin"),
+            &out.join("combined_ecc.bin"),
+            entry,
+            vtor,
+            memories,
         )
     } else {
         eprintln!("Invalid sign method {}", sign.method);
@@ -1617,6 +1693,7 @@ fn load_srec(
 fn load_elf(
     input: &Path,
     output: &mut BTreeMap<u32, LoadSegment>,
+    symbol_table: &mut BTreeMap<String, u32>,
 ) -> Result<(u32, usize)> {
     use goblin::container::Container;
     use goblin::elf::program_header::PT_LOAD;
@@ -1678,6 +1755,14 @@ fn load_elf(
                 data: file_image[offset..offset + size].to_vec(),
             },
         );
+    }
+
+    for s in elf.syms.iter() {
+        let index = s.st_name;
+
+        if let Some(name) = elf.strtab.get_at(index) {
+            symbol_table.insert(name.to_string(), s.st_value as u32);
+        }
     }
 
     // Return both our entry and the total allocated flash, allowing the
