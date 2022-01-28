@@ -3,11 +3,12 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::GPIO;
-use drv_spi_api::{Spi, SpiDevice, SpiError};
+use drv_spi_api::Spi;
 use drv_stm32h7_eth as eth;
 use drv_stm32h7_gpio_api as gpio_api;
+use ksz8463::{Ksz8463, Register as KszRegister};
 use ringbuf::*;
-use userlib::{hl::sleep_for, task_slot, FromPrimitive};
+use userlib::{hl::sleep_for, task_slot};
 use vsc7448_pac::types::PhyRegisterAddress;
 use vsc85xx::{Phy, PhyRw, PhyVsc85xx, VscError};
 
@@ -17,9 +18,6 @@ const KSZ8463_SPI_DEVICE: u8 = 0; // Based on app.toml ordering
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Trace {
     None,
-    KszRead(KszRegister, u16),
-    KszWrite(KszRegister, u16),
-    KszId(u16),
     Vsc8552Status { port: u8, status: u16 },
 }
 ringbuf!(Trace, 16, Trace::None);
@@ -33,7 +31,7 @@ pub struct Bsp {
 impl Bsp {
     pub fn new() -> Self {
         let spi = Spi::from(SPI.get_task_id()).device(KSZ8463_SPI_DEVICE);
-        let ksz = Ksz8463::new(spi, gpio_api::Port::A.pin(0))
+        let ksz = Ksz8463::new(spi, gpio_api::Port::A.pin(9));
 
         Self { ksz }
     }
@@ -119,7 +117,7 @@ impl Bsp {
         .unwrap();
     }
 
-    pub fn configure_phy(&self, eth: &mut eth::Ethernet) -> Self {
+    pub fn configure_phy(&self, eth: &mut eth::Ethernet) {
         // The KSZ8463 connects to the SP over RMII, then sends data to the
         // VSC8552 over 100-BASE FX
         self.ksz.configure();
@@ -127,8 +125,6 @@ impl Bsp {
         // The VSC8552 connects the KSZ switch to the management network
         // over SGMII
         configure_vsc8552(eth);
-
-        Self { ksz }
     }
 
     pub fn wake(&self, eth: &mut eth::Ethernet) {
@@ -182,46 +178,14 @@ pub fn configure_vsc8552(eth: &mut eth::Ethernet) {
     let gpio_driver = GPIO.get_task_id();
     let gpio_driver = Gpio::from(gpio_driver);
 
-    // TODO: wait for PLL lock to happen here
+    let nrst = gpio_api::Port::A.pin(10);
 
-    // Start with reset low and COMA_MODE high
-    // - SP_TO_PHY2_RESET_3V3_L (PI14)
-    let nrst = gpio_api::Port::I.pin(14);
+    // Start with reset low
     gpio_driver.reset(nrst).unwrap();
     gpio_driver
         .configure_output(nrst, OutputType::PushPull, Speed::Low, Pull::None)
         .unwrap();
-
-    // - SP_TO_PHY2_COMA_MODE (PI15, internal pull-up)
-    let coma_mode = gpio_api::Port::I.pin(15);
-    gpio_driver.set(coma_mode).unwrap();
-    gpio_driver
-        .configure_output(
-            coma_mode,
-            OutputType::PushPull,
-            Speed::Low,
-            Pull::None,
-        )
-        .unwrap();
-
-    // SP_TO_LDO_PHY2_EN (PI11)
-    let phy2_pwr_en = gpio_api::Port::I.pin(11);
-    gpio_driver.reset(phy2_pwr_en).unwrap();
-    gpio_driver
-        .configure_output(
-            phy2_pwr_en,
-            OutputType::PushPull,
-            Speed::Low,
-            Pull::None,
-        )
-        .unwrap();
-    gpio_driver.reset(phy2_pwr_en).unwrap();
-    sleep_for(10); // TODO: how long does this need to be?
-
-    // Power on!
-    gpio_driver.set(phy2_pwr_en).unwrap();
     sleep_for(4);
-    // TODO: sleep for PG lines going high here
 
     gpio_driver.set(nrst).unwrap();
     sleep_for(120); // Wait for the chip to come out of reset
@@ -233,7 +197,4 @@ pub fn configure_vsc8552(eth: &mut eth::Ethernet) {
         rw: &mut phy_rw,
     };
     vsc85xx::init_vsc8552_phy(&mut phy).unwrap();
-
-    // Disable COMA_MODE
-    gpio_driver.reset(coma_mode).unwrap();
 }
