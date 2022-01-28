@@ -3,11 +3,12 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::GPIO;
-use drv_spi_api::{Spi, SpiDevice, SpiError};
+use drv_spi_api::Spi;
 use drv_stm32h7_eth as eth;
 use drv_stm32h7_gpio_api as gpio_api;
+use ksz8463::{Ksz8463, Register as KszRegister};
 use ringbuf::*;
-use userlib::{hl::sleep_for, task_slot, FromPrimitive};
+use userlib::{hl::sleep_for, task_slot};
 use vsc7448_pac::types::PhyRegisterAddress;
 use vsc85xx::{Phy, PhyRw, PhyVsc85xx, VscError};
 
@@ -17,9 +18,7 @@ const KSZ8463_SPI_DEVICE: u8 = 0; // Based on app.toml ordering
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Trace {
     None,
-    KszRead(KszRegister, u16),
-    KszWrite(KszRegister, u16),
-    KszId(u16),
+    Ksz8463Status { port: u8, status: u16 },
     Vsc8552Status { port: u8, status: u16 },
 }
 ringbuf!(Trace, 16, Trace::None);
@@ -33,7 +32,7 @@ pub struct Bsp {
 impl Bsp {
     pub fn new() -> Self {
         let spi = Spi::from(SPI.get_task_id()).device(KSZ8463_SPI_DEVICE);
-        let ksz = Ksz8463::new(spi, gpio_api::Port::A.pin(0))
+        let ksz = Ksz8463::new(spi, gpio_api::Port::A.pin(0), false);
 
         Self { ksz }
     }
@@ -119,7 +118,7 @@ impl Bsp {
         .unwrap();
     }
 
-    pub fn configure_phy(&self, eth: &mut eth::Ethernet) -> Self {
+    pub fn configure_phy(&self, eth: &mut eth::Ethernet) {
         // The KSZ8463 connects to the SP over RMII, then sends data to the
         // VSC8552 over 100-BASE FX
         self.ksz.configure();
@@ -127,14 +126,20 @@ impl Bsp {
         // The VSC8552 connects the KSZ switch to the management network
         // over SGMII
         configure_vsc8552(eth);
-
-        Self { ksz }
     }
 
     pub fn wake(&self, eth: &mut eth::Ethernet) {
-        // These log to the ringbuf automatically
-        self.ksz.read(KszRegister::P1MBSR).unwrap();
-        self.ksz.read(KszRegister::P2MBSR).unwrap();
+        let p1_sr = self.ksz.read(KszRegister::P1MBSR).unwrap();
+        ringbuf_entry!(Trace::Ksz8463Status {
+            port: 1,
+            status: p1_sr
+        });
+
+        let p2_sr = self.ksz.read(KszRegister::P2MBSR).unwrap();
+        ringbuf_entry!(Trace::Ksz8463Status {
+            port: 2,
+            status: p2_sr
+        });
 
         for port in [0, 1] {
             let status = eth.smi_read(port, eth::SmiClause22Register::Status);
