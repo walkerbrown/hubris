@@ -2684,10 +2684,13 @@ dependencies = [
 name = "task-spdm-responder"
 version = "0.1.0"
 dependencies = [
+ "idol",
  "idol-runtime",
+ "num-traits",
  "ringbuf",
  "spdm",
  "userlib",
+ "zerocopy",
 ]
 
 [[package]]
