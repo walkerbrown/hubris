@@ -1,0 +1,19 @@
+// SPDM Responder Interface
+
+Interface(
+    name: "Spdm",
+    ops: {
+        "exchange": (
+            doc: "Exchange SPDM messages.",
+            args: {},
+            leases: {
+                "source": (type: "[u8]", read: true, max_len: Some(256)),
+                "sink": (type: "[u8]", write: true, max_len: Some(256)),
+            },
+            reply: Result(
+               ok: "()",
+               err: CLike("SpdmError"),
+           ),
+        )
+    },
+)
