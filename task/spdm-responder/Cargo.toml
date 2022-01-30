@@ -9,8 +9,8 @@ zerocopy = "0.6.1"
 num-traits = { version = "0.2.12", default-features = false }
 ringbuf = {path = "../../lib/ringbuf"}
 idol-runtime = {git = "https://github.com/oxidecomputer/idolatry.git"}
-spdm = {git = "https://github.com/oxidecomputer/spdm.git", branch = "crypto-cfg"}
-#spdm = {path = "../../../spdm"}
+#spdm = {git = "https://github.com/oxidecomputer/spdm.git", branch = "crypto-cfg"}
+spdm = {path = "../../../spdm"}
 
 [build-dependencies]
 #build-util = {path = "../../build/util"}
