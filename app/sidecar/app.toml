@@ -60,7 +60,7 @@ path = "../../drv/stm32h7-rcc"
 name = "drv-stm32h7-rcc"
 features = ["h753"]
 priority = 1
-requires = {flash = 8192, ram = 1024}
+requires = {flash = 4096, ram = 1024}
 uses = ["rcc"]
 start = true
 
@@ -93,7 +93,7 @@ global_config = "spi2"
 path = "../../drv/stm32h7-spi-server"
 name = "drv-stm32h7-spi-server"
 priority = 2
-requires = {flash = 16384, ram = 2048}
+requires = {flash = 16384, ram = 4096}
 features = ["h753", "spi3"]
 uses = ["spi3"]
 start = true
