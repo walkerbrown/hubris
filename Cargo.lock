@@ -894,7 +894,7 @@ dependencies = [
 name = "drv-stm32h7-eth"
 version = "0.1.0"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "cortex-m",
  "smoltcp",
  "stm32h7",
@@ -2602,7 +2602,7 @@ name = "task-net"
 version = "0.1.0"
 dependencies = [
  "build-util",
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "cortex-m",
  "drv-spi-api",
  "drv-stm32h7-eth",
@@ -2797,7 +2797,7 @@ name = "task-vsc7448"
 version = "0.1.0"
 dependencies = [
  "build-util",
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "drv-spi-api",
  "drv-stm32h7-gpio-api",
  "ringbuf",
@@ -3104,7 +3104,7 @@ name = "vsc7448"
 version = "0.1.0"
 dependencies = [
  "build-util",
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "drv-spi-api",
  "ringbuf",
  "userlib",

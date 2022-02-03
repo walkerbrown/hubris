@@ -10,9 +10,8 @@ use drv_stm32h7_eth as eth;
 /// become configurable.
 const PHYADDR: u8 = 0x01;
 
-pub struct Bsp {
-    // Empty handle
-}
+// Empty handle
+pub struct Bsp;
 
 impl Bsp {
     pub fn new() -> Self {

@@ -1,14 +1,14 @@
 [package]
 name = "task-vsc7448"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-cfg-if = "0.1.10"
+cfg-if = "1"
 userlib = {path = "../../sys/userlib", features = ["panic-messages"]}
 ringbuf = {path = "../../lib/ringbuf" }
 drv-spi-api = {path = "../../drv/spi-api"}
-drv-stm32h7-gpio-api = {path = "../../drv/stm32h7-gpio-api", default-features = false}
+drv-stm32h7-gpio-api = {path = "../../drv/stm32h7-gpio-api"}
 vsc7448 = {path = "../../drv/vsc7448" }
 vsc85xx = {path = "../../drv/vsc85xx" }
 vsc7448-pac = { git = "https://github.com/oxidecomputer/vsc7448" }
