@@ -7,6 +7,8 @@
 #![no_std]
 #![no_main]
 
+use stm32g0 as pac;
+
 #[cfg(feature = "g031")]
 use stm32g0::stm32g031 as device;
 
@@ -29,22 +31,37 @@ enum Bus {
     Apb2 = 3,
 }
 
-// None of the registers we interact with have the same types, and they share no
-// useful traits, so we can't extract the bit-setting routine into a function --
-// we have no choice but to use macros.
-macro_rules! set_bits {
-    ($reg:expr, $mask:expr) => {
-        $reg.modify(|r, w| unsafe { w.bits(r.bits() | $mask) })
-    };
+trait FlagsRegister {
+    /// Sets bit `index` in the register, preserving other bits.
+    ///
+    /// # Safety
+    ///
+    /// This is unsafe because, in theory, you might be able to find a register
+    /// where setting a bit can imperil memory safety. It is your responsibility
+    /// not to use this on such registers.
+    unsafe fn set_bit(&self, index: u8);
+
+    /// Clears bit `index` in the register, preserving other bits.
+    ///
+    /// # Safety
+    ///
+    /// This is unsafe because, in theory, you might be able to find a register
+    /// where clearing a bit can imperil memory safety. It is your
+    /// responsibility not to use this on such registers.
+    unsafe fn clear_bit(&self, index: u8);
 }
 
-// None of the registers we interact with have the same types, and they share no
-// useful traits, so we can't extract the bit-clearing routine into a function
-// -- we have no choice but to use macros.
-macro_rules! clear_bits {
-    ($reg:expr, $mask:expr) => {
-        $reg.modify(|r, w| unsafe { w.bits(r.bits() & !$mask) })
-    };
+impl<S> FlagsRegister for pac::Reg<S>
+where
+    S: pac::RegisterSpec<Ux = u32> + pac::Readable + pac::Writable,
+{
+    unsafe fn set_bit(&self, index: u8) {
+        self.modify(|r, w| unsafe { w.bits(r.bits() | 1 << index) });
+    }
+
+    unsafe fn clear_bit(&self, index: u8) {
+        self.modify(|r, w| unsafe { w.bits(r.bits() & !(1 << index)) });
+    }
 }
 
 #[export_name = "main"]
@@ -74,7 +91,6 @@ fn main() -> ! {
     });
 
     // Field messages.
-    // Ensure our buffer is aligned properly for a u32 by declaring it as one.
     let mut buffer = [0u8; idl::INCOMING_SIZE];
     let mut server = ServerImpl { rcc };
     loop {
@@ -87,10 +103,10 @@ struct ServerImpl<'a> {
 }
 
 impl ServerImpl<'_> {
-    fn unpack_raw(raw: u32) -> Result<(Bus, u32), RequestError<RccError>> {
-        let pmask: u32 = 1 << (raw & 0x1F);
+    fn unpack_raw(raw: u32) -> Result<(Bus, u8), RequestError<RccError>> {
+        let bit: u8 = (raw & 0x1F) as u8;
         let bus = Bus::from_u32(raw >> 5).ok_or(RccError::NoSuchPeripheral)?;
-        Ok((bus, pmask))
+        Ok((bus, bit))
     }
 }
 
@@ -101,10 +117,10 @@ impl idl::InOrderSysImpl for ServerImpl<'_> {
         raw: u32,
     ) -> Result<(), RequestError<RccError>> {
         match Self::unpack_raw(raw)? {
-            (Bus::Iop, pmask) => set_bits!(self.rcc.iopenr, pmask),
-            (Bus::Ahb, pmask) => set_bits!(self.rcc.ahbenr, pmask),
-            (Bus::Apb1, pmask) => set_bits!(self.rcc.apbenr1, pmask),
-            (Bus::Apb2, pmask) => set_bits!(self.rcc.apbenr2, pmask),
+            (Bus::Iop, bit) => unsafe { self.rcc.iopenr.set_bit(bit) },
+            (Bus::Ahb, bit) => unsafe { self.rcc.ahbenr.set_bit(bit) },
+            (Bus::Apb1, bit) => unsafe { self.rcc.apbenr1.set_bit(bit) },
+            (Bus::Apb2, bit) => unsafe { self.rcc.apbenr2.set_bit(bit) },
         }
         Ok(())
     }
@@ -115,10 +131,10 @@ impl idl::InOrderSysImpl for ServerImpl<'_> {
         raw: u32,
     ) -> Result<(), RequestError<RccError>> {
         match Self::unpack_raw(raw)? {
-            (Bus::Iop, pmask) => clear_bits!(self.rcc.iopenr, pmask),
-            (Bus::Ahb, pmask) => clear_bits!(self.rcc.ahbenr, pmask),
-            (Bus::Apb1, pmask) => clear_bits!(self.rcc.apbenr1, pmask),
-            (Bus::Apb2, pmask) => clear_bits!(self.rcc.apbenr2, pmask),
+            (Bus::Iop, bit) => unsafe { self.rcc.iopenr.clear_bit(bit) },
+            (Bus::Ahb, bit) => unsafe { self.rcc.ahbenr.clear_bit(bit) },
+            (Bus::Apb1, bit) => unsafe { self.rcc.apbenr1.clear_bit(bit) },
+            (Bus::Apb2, bit) => unsafe { self.rcc.apbenr2.clear_bit(bit) },
         }
         Ok(())
     }
@@ -129,10 +145,10 @@ impl idl::InOrderSysImpl for ServerImpl<'_> {
         raw: u32,
     ) -> Result<(), RequestError<RccError>> {
         match Self::unpack_raw(raw)? {
-            (Bus::Iop, pmask) => set_bits!(self.rcc.ioprstr, pmask),
-            (Bus::Ahb, pmask) => set_bits!(self.rcc.ahbrstr, pmask),
-            (Bus::Apb1, pmask) => set_bits!(self.rcc.apbrstr1, pmask),
-            (Bus::Apb2, pmask) => set_bits!(self.rcc.apbrstr2, pmask),
+            (Bus::Iop, bit) => unsafe { self.rcc.ioprstr.set_bit(bit) },
+            (Bus::Ahb, bit) => unsafe { self.rcc.ahbrstr.set_bit(bit) },
+            (Bus::Apb1, bit) => unsafe { self.rcc.apbrstr1.set_bit(bit) },
+            (Bus::Apb2, bit) => unsafe { self.rcc.apbrstr2.set_bit(bit) },
         }
         Ok(())
     }
@@ -143,10 +159,10 @@ impl idl::InOrderSysImpl for ServerImpl<'_> {
         raw: u32,
     ) -> Result<(), RequestError<RccError>> {
         match Self::unpack_raw(raw)? {
-            (Bus::Iop, pmask) => clear_bits!(self.rcc.ioprstr, pmask),
-            (Bus::Ahb, pmask) => clear_bits!(self.rcc.ahbrstr, pmask),
-            (Bus::Apb1, pmask) => clear_bits!(self.rcc.apbrstr1, pmask),
-            (Bus::Apb2, pmask) => clear_bits!(self.rcc.apbrstr2, pmask),
+            (Bus::Iop, bit) => unsafe { self.rcc.ioprstr.clear_bit(bit) },
+            (Bus::Ahb, bit) => unsafe { self.rcc.ahbrstr.clear_bit(bit) },
+            (Bus::Apb1, bit) => unsafe { self.rcc.apbrstr1.clear_bit(bit) },
+            (Bus::Apb2, bit) => unsafe { self.rcc.apbrstr2.clear_bit(bit) },
         }
         Ok(())
     }

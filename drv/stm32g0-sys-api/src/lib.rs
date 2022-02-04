@@ -99,7 +99,11 @@ impl Sys {
 /// The reference manual lacks a term for this, so we made this one up. It would
 /// be tempting to refer to these as "buses," but in practice there are almost
 /// always more groups than there are buses, particularly on M0.
-enum Group {
+///
+/// This is `pub` mostly for use inside driver-servers.
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+pub enum Group {
     Iop = 0,
     Ahb,
     Apb1,
@@ -127,7 +131,7 @@ const fn periph(g: Group, bit_number: u8) -> u32 {
 /// These are in the order that they appear in the documentation.   This is
 /// the union of all STM32G0 peripherals; not all peripherals will exist on
 /// all variants!
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, FromPrimitive)]
 #[repr(u32)]
 pub enum Peripheral {
     GpioF = periph(Group::Iop, 5),
@@ -182,6 +186,27 @@ pub enum Peripheral {
     Spi1 = periph(Group::Apb2, 12),
     Tim1 = periph(Group::Apb2, 11),
     Syscfg = periph(Group::Apb2, 0),
+}
+
+impl Peripheral {
+    pub fn group(self) -> Group {
+        let index = (self as u32 >> 5) as u8;
+        // Safety: this is unsafe because it can turn any arbitrary bit pattern
+        // into a `Group`, potentially resulting in undefined behavior. However,
+        // `self` is a valid `Peripheral`, and we make sure (above) that
+        // `Peripheral` has valid values in its `Group` bits by only
+        // constructing it _from_ a `Group`. So this is safe.
+        //
+        // The reason this is using unsafe code in the _first_ place is to
+        // ensure that we don't generate an unnecessary panic here. We don't
+        // need the panic because we already checked user input on the way into
+        // the `Peripheral` type.
+        unsafe { core::mem::transmute(index) }
+    }
+
+    pub fn bit_index(self) -> u8 {
+        self as u8 & 0x1F
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
