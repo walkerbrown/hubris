@@ -11,7 +11,7 @@ use drv_stm32h7_gpio_api as gpio_api;
 use ksz8463::{Ksz8463, Register as KszRegister};
 use ringbuf::*;
 use userlib::{hl::sleep_for, task_slot};
-use vsc7448_pac::{phy, types::PhyRegisterAddress};
+use vsc7448_pac::phy;
 use vsc85xx::{Phy, PhyVsc85xx, VscError};
 
 task_slot!(SPI, spi_driver);

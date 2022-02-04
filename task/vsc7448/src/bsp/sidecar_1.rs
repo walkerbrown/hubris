@@ -235,8 +235,6 @@ impl<'a> Bsp<'a> {
 
     pub fn run(&mut self) -> ! {
         loop {
-            self.net.wake().unwrap();
-
             for port in 4..8 {
                 let mut vsc8504 = Phy { port, rw: self };
                 let status: u16 =
