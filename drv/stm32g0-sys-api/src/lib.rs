@@ -101,7 +101,7 @@ impl Sys {
 /// always more groups than there are buses, particularly on M0.
 ///
 /// This is `pub` mostly for use inside driver-servers.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, FromPrimitive)]
 #[repr(u8)]
 pub enum Group {
     Iop = 0,
@@ -131,7 +131,7 @@ const fn periph(g: Group, bit_number: u8) -> u32 {
 /// These are in the order that they appear in the documentation.   This is
 /// the union of all STM32G0 peripherals; not all peripherals will exist on
 /// all variants!
-#[derive(Copy, Clone, Eq, PartialEq, Debug, FromPrimitive)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(u32)]
 pub enum Peripheral {
     GpioF = periph(Group::Iop, 5),
@@ -189,6 +189,7 @@ pub enum Peripheral {
 }
 
 impl Peripheral {
+    #[inline(always)]
     pub fn group(self) -> Group {
         let index = (self as u32 >> 5) as u8;
         // Safety: this is unsafe because it can turn any arbitrary bit pattern
@@ -204,6 +205,7 @@ impl Peripheral {
         unsafe { core::mem::transmute(index) }
     }
 
+    #[inline(always)]
     pub fn bit_index(self) -> u8 {
         self as u8 & 0x1F
     }

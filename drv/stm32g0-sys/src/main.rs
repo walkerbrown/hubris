@@ -18,18 +18,10 @@ use stm32g0::stm32g070 as device;
 #[cfg(feature = "g0b1")]
 use stm32g0::stm32g0b1 as device;
 
-use drv_stm32g0_sys_api::{GpioError, RccError};
+use drv_stm32g0_sys_api::{GpioError, Group, RccError};
 use drv_stm32xx_gpio_common::{server::get_gpio_regs, Port};
 use idol_runtime::RequestError;
 use userlib::*;
-
-#[derive(FromPrimitive)]
-enum Bus {
-    Iop = 0,
-    Ahb = 1,
-    Apb1 = 2,
-    Apb2 = 3,
-}
 
 trait FlagsRegister {
     /// Sets bit `index` in the register, preserving other bits.
@@ -103,9 +95,14 @@ struct ServerImpl<'a> {
 }
 
 impl ServerImpl<'_> {
-    fn unpack_raw(raw: u32) -> Result<(Bus, u8), RequestError<RccError>> {
+    fn unpack_raw(raw: u32) -> Result<(Group, u8), RequestError<RccError>> {
         let bit: u8 = (raw & 0x1F) as u8;
-        let bus = Bus::from_u32(raw >> 5).ok_or(RccError::NoSuchPeripheral)?;
+        let bus =
+            Group::from_u32(raw >> 5).ok_or(RccError::NoSuchPeripheral)?;
+        // TODO: this lets people refer to bit indices that are not included in
+        // the Peripheral enum, which is not great. Fixing this by deriving
+        // FromPrimitive for Peripheral results in _really expensive_ checking
+        // code. We could do better.
         Ok((bus, bit))
     }
 }
@@ -117,10 +114,10 @@ impl idl::InOrderSysImpl for ServerImpl<'_> {
         raw: u32,
     ) -> Result<(), RequestError<RccError>> {
         match Self::unpack_raw(raw)? {
-            (Bus::Iop, bit) => unsafe { self.rcc.iopenr.set_bit(bit) },
-            (Bus::Ahb, bit) => unsafe { self.rcc.ahbenr.set_bit(bit) },
-            (Bus::Apb1, bit) => unsafe { self.rcc.apbenr1.set_bit(bit) },
-            (Bus::Apb2, bit) => unsafe { self.rcc.apbenr2.set_bit(bit) },
+            (Group::Iop, bit) => unsafe { self.rcc.iopenr.set_bit(bit) },
+            (Group::Ahb, bit) => unsafe { self.rcc.ahbenr.set_bit(bit) },
+            (Group::Apb1, bit) => unsafe { self.rcc.apbenr1.set_bit(bit) },
+            (Group::Apb2, bit) => unsafe { self.rcc.apbenr2.set_bit(bit) },
         }
         Ok(())
     }
@@ -131,10 +128,10 @@ impl idl::InOrderSysImpl for ServerImpl<'_> {
         raw: u32,
     ) -> Result<(), RequestError<RccError>> {
         match Self::unpack_raw(raw)? {
-            (Bus::Iop, bit) => unsafe { self.rcc.iopenr.clear_bit(bit) },
-            (Bus::Ahb, bit) => unsafe { self.rcc.ahbenr.clear_bit(bit) },
-            (Bus::Apb1, bit) => unsafe { self.rcc.apbenr1.clear_bit(bit) },
-            (Bus::Apb2, bit) => unsafe { self.rcc.apbenr2.clear_bit(bit) },
+            (Group::Iop, bit) => unsafe { self.rcc.iopenr.clear_bit(bit) },
+            (Group::Ahb, bit) => unsafe { self.rcc.ahbenr.clear_bit(bit) },
+            (Group::Apb1, bit) => unsafe { self.rcc.apbenr1.clear_bit(bit) },
+            (Group::Apb2, bit) => unsafe { self.rcc.apbenr2.clear_bit(bit) },
         }
         Ok(())
     }
@@ -145,10 +142,10 @@ impl idl::InOrderSysImpl for ServerImpl<'_> {
         raw: u32,
     ) -> Result<(), RequestError<RccError>> {
         match Self::unpack_raw(raw)? {
-            (Bus::Iop, bit) => unsafe { self.rcc.ioprstr.set_bit(bit) },
-            (Bus::Ahb, bit) => unsafe { self.rcc.ahbrstr.set_bit(bit) },
-            (Bus::Apb1, bit) => unsafe { self.rcc.apbrstr1.set_bit(bit) },
-            (Bus::Apb2, bit) => unsafe { self.rcc.apbrstr2.set_bit(bit) },
+            (Group::Iop, bit) => unsafe { self.rcc.ioprstr.set_bit(bit) },
+            (Group::Ahb, bit) => unsafe { self.rcc.ahbrstr.set_bit(bit) },
+            (Group::Apb1, bit) => unsafe { self.rcc.apbrstr1.set_bit(bit) },
+            (Group::Apb2, bit) => unsafe { self.rcc.apbrstr2.set_bit(bit) },
         }
         Ok(())
     }
@@ -159,10 +156,10 @@ impl idl::InOrderSysImpl for ServerImpl<'_> {
         raw: u32,
     ) -> Result<(), RequestError<RccError>> {
         match Self::unpack_raw(raw)? {
-            (Bus::Iop, bit) => unsafe { self.rcc.ioprstr.clear_bit(bit) },
-            (Bus::Ahb, bit) => unsafe { self.rcc.ahbrstr.clear_bit(bit) },
-            (Bus::Apb1, bit) => unsafe { self.rcc.apbrstr1.clear_bit(bit) },
-            (Bus::Apb2, bit) => unsafe { self.rcc.apbrstr2.clear_bit(bit) },
+            (Group::Iop, bit) => unsafe { self.rcc.ioprstr.clear_bit(bit) },
+            (Group::Ahb, bit) => unsafe { self.rcc.ahbrstr.clear_bit(bit) },
+            (Group::Apb1, bit) => unsafe { self.rcc.apbrstr1.clear_bit(bit) },
+            (Group::Apb2, bit) => unsafe { self.rcc.apbrstr2.clear_bit(bit) },
         }
         Ok(())
     }
